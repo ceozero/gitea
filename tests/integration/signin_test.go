@@ -189,6 +189,13 @@ func TestRequireSignInView(t *testing.T) {
 			resp := MakeRequest(t, req, http.StatusSeeOther)
 			assert.Equal(t, "/user/login?redirect_to=%2Fuser2%2Frepo1%2Fsrc%2Fbranch%2Fmaster", resp.Header().Get("Location"))
 		})
+		t.Run("AccessPublicRawWhenEnabled", func(t *testing.T) {
+			defer test.MockVariableValue(&setting.Service.AllowAnonymousPublicRaw, true)()
+			defer test.MockVariableValue(&testWebRoutes, routers.NormalRoutes())()
+
+			MakeRequest(t, NewRequest(t, "GET", "/user2/repo1/raw/branch/master/README.md"), http.StatusOK)
+			MakeRequest(t, NewRequest(t, "GET", "/user2/repo2/raw/branch/master/test.xml"), http.StatusNotFound)
+		})
 		t.Run("UpdateTheme", func(t *testing.T) {
 			session := emptyTestSession(t)
 			req := NewRequest(t, "POST", "/-/web-theme/apply?theme=gitea-dark")

@@ -570,11 +570,13 @@ func ContainerRoutes() *web.Router {
 		r.Get("", container.Authenticate)
 		r.Post("", container.AuthenticateNotImplemented)
 	})
-	r.Get("/_catalog", container.ReqContainerAccess, container.GetRepositoryList)
+	// 本实例扩展：匿名公开镜像拉取不放开全局容器仓库目录。
+	r.Get("/_catalog", container.ReqContainerDiscoveryAccess, container.GetRepositoryList)
 	r.Group("/{username}", func() {
 		r.PathGroup("/*", func(g *web.RouterPathGroup) {
 			g.MatchPath("POST", "/<image:*>/blobs/uploads", reqPackageAccess(perm.AccessModeWrite), container.VerifyImageName, container.PostBlobsUploads)
-			g.MatchPath("GET", "/<image:*>/tags/list", container.VerifyImageName, container.GetTagsList)
+			// 本实例扩展：匿名公开镜像拉取不放开标签枚举。
+			g.MatchPath("GET", "/<image:*>/tags/list", container.ReqContainerDiscoveryAccess, container.VerifyImageName, container.GetTagsList)
 
 			patternBlobsUploadsUUID := g.PatternRegexp(`/<image:*>/blobs/uploads/<uuid:[-.=\w]+>`, reqPackageAccess(perm.AccessModeWrite), container.VerifyImageName)
 			g.MatchPattern("GET", patternBlobsUploadsUUID, container.GetBlobsUpload)

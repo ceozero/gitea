@@ -359,6 +359,8 @@ func registerWebRoutes(m *web.Router, webAuth *AuthMiddleware) {
 	reqSignOut := verifyAuthWithOptions(&common.VerifyOptions{SignOutRequired: true})
 	// middleware: optional sign in (if signed in, use the user as doer, if not, no doer)
 	optSignIn := verifyAuthWithOptions(&common.VerifyOptions{SignInRequired: setting.Service.RequireSignInViewStrict})
+	// 本实例扩展：仅公开仓库的 raw 路由可在强制登录时保留匿名只读能力。
+	optSignInRaw := verifyAuthWithOptions(&common.VerifyOptions{SignInRequired: setting.Service.RequireSignInViewStrict && !setting.Service.AllowAnonymousPublicRaw})
 	optExploreSignIn := verifyAuthWithOptions(&common.VerifyOptions{SignInRequired: setting.Service.RequireSignInViewStrict || setting.Service.Explore.RequireSigninView})
 	// middleware: only apply CrossOriginProtection
 	crossOriginProtect := verifyAuthWithOptions(&common.VerifyOptions{DisableCrossOriginProtection: false})
@@ -1296,6 +1298,16 @@ func registerWebRoutes(m *web.Router, webAuth *AuthMiddleware) {
 
 	m.Post("/{username}/{reponame}/markup", optSignIn, context.RepoAssignment, reqUnitsWithMarkdown, web.Bind[*structs.MarkupOption](), misc.Markup)
 
+	// 本实例扩展：将 raw 路由从通用代码页面路由组拆出，以便只对公开仓库放宽匿名只读。
+	// RepoAssignment 与 reqUnitCodeReader 仍会拒绝私有仓库和禁用代码单元的访问。
+	m.Group("/{username}/{reponame}/raw", func() {
+		m.Get("/blob/{sha}", repo.DownloadByID)
+		m.Get("/branch/*", context.RepoRefByType(git.RefTypeBranch), repo.SingleDownload)
+		m.Get("/tag/*", context.RepoRefByType(git.RefTypeTag), repo.SingleDownload)
+		m.Get("/commit/*", context.RepoRefByType(git.RefTypeCommit), repo.SingleDownload)
+		m.Get("/*", context.RepoRefByType(""), repo.SingleDownload) // "/*" route is deprecated, and kept for backward compatibility
+	}, webAuth.AllowBasic, webAuth.AllowOAuth2, optSignInRaw, context.RepoAssignment, repo.MustBeNotEmpty, reqUnitCodeReader)
+
 	m.Group("/{username}/{reponame}", func() {
 		m.Group("/tree-list", func() {
 			m.Get("/branch/*", context.RepoRefByType(git.RefTypeBranch), repo.TreeList)
@@ -1701,14 +1713,6 @@ func registerWebRoutes(m *web.Router, webAuth *AuthMiddleware) {
 			m.Get("/tag/*", context.RepoRefByType(git.RefTypeTag), repo.SingleDownloadOrLFS)
 			m.Get("/commit/*", context.RepoRefByType(git.RefTypeCommit), repo.SingleDownloadOrLFS)
 			m.Get("/*", context.RepoRefByType(""), repo.SingleDownloadOrLFS) // "/*" route is deprecated, and kept for backward compatibility
-		}, webAuth.AllowBasic, webAuth.AllowOAuth2, repo.MustBeNotEmpty)
-
-		m.Group("/raw", func() {
-			m.Get("/blob/{sha}", repo.DownloadByID)
-			m.Get("/branch/*", context.RepoRefByType(git.RefTypeBranch), repo.SingleDownload)
-			m.Get("/tag/*", context.RepoRefByType(git.RefTypeTag), repo.SingleDownload)
-			m.Get("/commit/*", context.RepoRefByType(git.RefTypeCommit), repo.SingleDownload)
-			m.Get("/*", context.RepoRefByType(""), repo.SingleDownload) // "/*" route is deprecated, and kept for backward compatibility
 		}, webAuth.AllowBasic, webAuth.AllowOAuth2, repo.MustBeNotEmpty)
 
 		m.Group("/render", func() {

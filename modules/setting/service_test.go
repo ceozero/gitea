@@ -139,6 +139,8 @@ func TestLoadServiceRequireSignInView(t *testing.T) {
 	loadServiceFrom(cfg)
 	assert.False(t, Service.RequireSignInViewStrict)
 	assert.False(t, Service.BlockAnonymousAccessExpensive)
+	assert.False(t, Service.AllowAnonymousPublicRaw)
+	assert.False(t, Service.AllowAnonymousPublicContainerPull)
 
 	cfg, err = NewConfigProviderFromData(`
 [service]
@@ -157,4 +159,14 @@ REQUIRE_SIGNIN_VIEW = expensive
 	loadServiceFrom(cfg)
 	assert.False(t, Service.RequireSignInViewStrict)
 	assert.True(t, Service.BlockAnonymousAccessExpensive)
+
+	cfg, err = NewConfigProviderFromData(`
+[service]
+ALLOW_ANONYMOUS_PUBLIC_RAW = true
+ALLOW_ANONYMOUS_PUBLIC_CONTAINER_PULL = true
+`)
+	assert.NoError(t, err)
+	loadServiceFrom(cfg)
+	assert.True(t, Service.AllowAnonymousPublicRaw)
+	assert.True(t, Service.AllowAnonymousPublicContainerPull)
 }

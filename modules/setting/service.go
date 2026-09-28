@@ -25,22 +25,25 @@ const (
 
 // Service settings
 var Service = struct {
-	DefaultUserVisibilityMode               structs.VisibleType `ini:"-"`
-	AllowedUserVisibilityModesSlice         AllowedVisibility   `ini:"-"`
-	DefaultOrgVisibilityMode                structs.VisibleType `ini:"-"`
-	ActiveCodeLives                         int
-	ResetPwdCodeLives                       int
-	RegisterEmailConfirm                    bool
-	RegisterManualConfirm                   bool
-	EmailDomainAllowList                    []glob.Glob
-	EmailDomainBlockList                    []glob.Glob
-	DisableRegistration                     bool
-	AllowOnlyInternalRegistration           bool
-	AllowOnlyExternalRegistration           bool
-	ShowRegistrationButton                  bool
-	EnablePasswordSignInForm                bool
-	ShowMilestonesDashboardPage             bool
-	RequireSignInViewStrict                 bool
+	DefaultUserVisibilityMode       structs.VisibleType `ini:"-"`
+	AllowedUserVisibilityModesSlice AllowedVisibility   `ini:"-"`
+	DefaultOrgVisibilityMode        structs.VisibleType `ini:"-"`
+	ActiveCodeLives                 int
+	ResetPwdCodeLives               int
+	RegisterEmailConfirm            bool
+	RegisterManualConfirm           bool
+	EmailDomainAllowList            []glob.Glob
+	EmailDomainBlockList            []glob.Glob
+	DisableRegistration             bool
+	AllowOnlyInternalRegistration   bool
+	AllowOnlyExternalRegistration   bool
+	ShowRegistrationButton          bool
+	EnablePasswordSignInForm        bool
+	ShowMilestonesDashboardPage     bool
+	RequireSignInViewStrict         bool
+	// 以下两个选项为本实例扩展，非 Gitea 官方默认配置；仅允许已公开资源的匿名只读访问。
+	AllowAnonymousPublicRaw                 bool
+	AllowAnonymousPublicContainerPull       bool
 	BlockAnonymousAccessExpensive           bool
 	EnableNotifyMail                        bool
 	EnableBasicAuth                         bool
@@ -175,6 +178,8 @@ func loadServiceFrom(rootCfg ConfigProvider) {
 			log.Fatal("Invalid config option: REQUIRE_SIGNIN_VIEW = %s", s)
 		}
 	}
+	Service.AllowAnonymousPublicRaw = sec.Key("ALLOW_ANONYMOUS_PUBLIC_RAW").MustBool(false)
+	Service.AllowAnonymousPublicContainerPull = sec.Key("ALLOW_ANONYMOUS_PUBLIC_CONTAINER_PULL").MustBool(false)
 
 	Service.EnableBasicAuth = sec.Key("ENABLE_BASIC_AUTHENTICATION").MustBool(true)
 	Service.EnablePasswordSignInForm = sec.Key("ENABLE_PASSWORD_SIGNIN_FORM").MustBool(true)

@@ -65,6 +65,7 @@ func TestPackageContainer(t *testing.T) {
 
 	blobDigest := "sha256:a3ed95caeb02ffe68cdd9fd84406680ae93d633cb16422d00e8a7c22955b46d4"
 	blobContent, _ := base64.StdEncoding.DecodeString(`H4sIAAAJbogA/2IYBaNgFIxYAAgAAP//Lq+17wAEAAA=`)
+	privateBlobDigest := "sha256:6ccce4863b70f258d691f59609d31b4502e1ba5199942d3bc5d35d17a4ce771d"
 
 	configDigest := "sha256:4607e093bec406eaadb6f3a340f63400c9d3a7038680744c406903766b938f0d"
 	configContent := `{"architecture":"amd64","config":{"Env":["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"],"Cmd":["/true"],"ArgsEscaped":true,"Image":"sha256:9bd8b88dc68b80cffe126cc820e4b52c6e558eb3b37680bfee8e5f3ed7b8c257"},"container":"b89fe92a887d55c0961f02bdfbfd8ac3ddf66167db374770d2d9e9fab3311510","container_config":{"Hostname":"b89fe92a887d","Env":["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"],"Cmd":["/bin/sh","-c","#(nop) ","CMD [\"/true\"]"],"ArgsEscaped":true,"Image":"sha256:9bd8b88dc68b80cffe126cc820e4b52c6e558eb3b37680bfee8e5f3ed7b8c257"},"created":"2022-01-01T00:00:00.000000000Z","docker_version":"20.10.12","history":[{"created":"2022-01-01T00:00:00.000000000Z","created_by":"/bin/sh -c #(nop) COPY file:0e7589b0c800daaf6fa460d2677101e4676dd9491980210cb345480e513f3602 in /true "},{"created":"2022-01-01T00:00:00.000000001Z","created_by":"/bin/sh -c #(nop)  CMD [\"/true\"]","empty_layer":true}],"os":"linux","rootfs":{"type":"layers","diff_ids":["sha256:0ff3b91bdf21ecdf2f2f3d4372c2098a14dbe06cd678e8f0a85fd4902d00e2e2"]}}`
@@ -119,6 +120,19 @@ func TestPackageContainer(t *testing.T) {
 
 			req = NewRequest(t, "GET", setting.AppURL+"v2/token")
 			MakeRequest(t, req, http.StatusUnauthorized)
+
+			defer test.MockVariableValue(&setting.Service.AllowAnonymousPublicContainerPull, true)()
+			req = NewRequest(t, "GET", setting.AppURL+"v2")
+			resp = MakeRequest(t, req, http.StatusUnauthorized)
+			assert.ElementsMatch(t, wwwAuthenticateForPublic, resp.Header().Values("WWW-Authenticate"))
+
+			req = NewRequest(t, "GET", setting.AppURL+"v2/token")
+			resp = MakeRequest(t, req, http.StatusOK)
+			tokenResponse = DecodeJSON(t, resp, &TokenResponse{})
+			assert.NotEmpty(t, tokenResponse.Token)
+
+			req = NewRequest(t, "GET", setting.AppURL+"v2").AddTokenAuth("Bearer " + tokenResponse.Token)
+			MakeRequest(t, req, http.StatusOK)
 
 			defer test.MockVariableValue(&setting.AppURL, "https://domain:8443/sub-path/")()
 			defer test.MockVariableValue(&setting.AppSubURL, "/sub-path")()
@@ -363,7 +377,6 @@ func TestPackageContainer(t *testing.T) {
 			t.Run("UploadBlob/Mount", func(t *testing.T) {
 				defer tests.PrintCurrentTest(t)()
 
-				privateBlobDigest := "sha256:6ccce4863b70f258d691f59609d31b4502e1ba5199942d3bc5d35d17a4ce771d"
 				req := NewRequestWithBody(t, "POST", fmt.Sprintf("%sv2/%s/%s/blobs/uploads?digest=%s", setting.AppURL, privateUser.Name, image, privateBlobDigest), strings.NewReader("gitea")).
 					AddBasicAuth(privateUser.Name)
 				MakeRequest(t, req, http.StatusCreated)
@@ -503,6 +516,30 @@ func TestPackageContainer(t *testing.T) {
 						assert.Equal(t, oci.MediaTypeImageManifest, resp.Header().Get("Content-Type")) // the manifest is overwritten by above OverwriteTagKeepDownloadCount
 						assert.Equal(t, manifestDigest, resp.Header().Get("Docker-Content-Digest"))
 						assert.Equal(t, manifestContent, resp.Body.String())
+
+						t.Run("AnonymousPullWhenEnabled", func(t *testing.T) {
+							defer tests.PrintCurrentTest(t)()
+							defer test.MockVariableValue(&setting.Service.RequireSignInViewStrict, true)()
+							defer test.MockVariableValue(&setting.Service.AllowAnonymousPublicContainerPull, true)()
+
+							req := NewRequest(t, "GET", fmt.Sprintf("%s/manifests/%s", url, tag)).
+								AddTokenAuth(anonymousToken)
+							MakeRequest(t, req, http.StatusOK)
+
+							privateURL := fmt.Sprintf("%sv2/%s/%s", setting.AppURL, privateUser.Name, image)
+							req = NewRequest(t, "GET", fmt.Sprintf("%s/blobs/%s", privateURL, privateBlobDigest)).
+								AddTokenAuth(anonymousToken)
+							MakeRequest(t, req, http.StatusUnauthorized)
+
+							req = NewRequest(t, "GET", setting.AppURL+"v2/_catalog").AddTokenAuth(anonymousToken)
+							MakeRequest(t, req, http.StatusUnauthorized)
+
+							req = NewRequest(t, "GET", url+"/tags/list").AddTokenAuth(anonymousToken)
+							MakeRequest(t, req, http.StatusUnauthorized)
+
+							req = NewRequest(t, "POST", url+"/blobs/uploads").AddTokenAuth(anonymousToken)
+							MakeRequest(t, req, http.StatusUnauthorized)
+						})
 					})
 				})
 			}

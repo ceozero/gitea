@@ -110,7 +110,8 @@ func packageAssignment(ctx *packageAssignmentCtx, errCb func(int, string)) *Pack
 }
 
 func determineAccessMode(ctx *Base, pkgOwner, doer *user_model.User) (perm.AccessMode, error) {
-	if setting.Service.RequireSignInViewStrict && (doer == nil || doer.IsGhost()) {
+	// 本实例扩展：容器路由使用 Ghost 用户承载匿名 token；开启公开镜像拉取时，继续按归属者可见性授予只读权限。
+	if setting.Service.RequireSignInViewStrict && (doer == nil || (doer.IsGhost() && !setting.Service.AllowAnonymousPublicContainerPull)) {
 		return perm.AccessModeNone, nil
 	}
 

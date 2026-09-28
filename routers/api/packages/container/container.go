@@ -121,7 +121,8 @@ func APIUnauthorizedError(ctx *context.Context) {
 	ownerName := ctx.PathParam("username")
 	owner, _ := user_model.GetUserByName(ctx, ownerName)
 	requireSignIn := owner != nil && owner.Visibility != structs.VisibleTypePublic
-	requireSignIn = requireSignIn || setting.Service.RequireSignInViewStrict
+	// 本实例扩展：公开容器镜像可在强制登录时匿名拉取，私有归属仍要求登录。
+	requireSignIn = requireSignIn || (setting.Service.RequireSignInViewStrict && !setting.Service.AllowAnonymousPublicContainerPull)
 	if requireSignIn {
 		// support apple container like: container registry login <gitea-host> -u
 		ctx.Resp.Header().Add("WWW-Authenticate", `Basic realm="Gitea Container Registry"`)
@@ -131,9 +132,20 @@ func APIUnauthorizedError(ctx *context.Context) {
 
 // ReqContainerAccess is a middleware which checks the current user valid (real user or ghost if anonymous access is enabled)
 func ReqContainerAccess(ctx *context.Context) {
-	if ctx.Doer == nil || (setting.Service.RequireSignInViewStrict && ctx.Doer.IsGhost()) {
+	// 本实例扩展：放行 Ghost 用户后仍由 PackageAssignment 和 reqPackageAccess 校验包的公开只读权限。
+	if ctx.Doer == nil || (setting.Service.RequireSignInViewStrict && !setting.Service.AllowAnonymousPublicContainerPull && ctx.Doer.IsGhost()) {
 		APIUnauthorizedError(ctx)
 	}
+}
+
+// ReqContainerDiscoveryAccess keeps repository and tag discovery signed-in when only anonymous image pulls are enabled.
+func ReqContainerDiscoveryAccess(ctx *context.Context) {
+	// 本实例扩展：公开镜像拉取不包含目录或标签枚举，避免 REQUIRE_SIGNIN_VIEW 被用于资源发现。
+	if setting.Service.RequireSignInViewStrict && setting.Service.AllowAnonymousPublicContainerPull && ctx.Doer != nil && ctx.Doer.IsGhost() {
+		APIUnauthorizedError(ctx)
+		return
+	}
+	ReqContainerAccess(ctx)
 }
 
 // VerifyImageName is a middleware which checks if the image name is allowed
@@ -155,7 +167,8 @@ func Authenticate(ctx *context.Context) {
 	u := ctx.Doer
 	packageScope := auth_service.GetAccessScope(ctx.Data)
 	if u == nil {
-		if setting.Service.RequireSignInViewStrict {
+		// 本实例扩展：仅为公开容器拉取签发 Ghost token，不影响任何写操作。
+		if setting.Service.RequireSignInViewStrict && !setting.Service.AllowAnonymousPublicContainerPull {
 			APIUnauthorizedError(ctx)
 			return
 		}
