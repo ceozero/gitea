@@ -188,13 +188,19 @@ func TestRequireSignInView(t *testing.T) {
 			req := NewRequest(t, "GET", "/user2/repo1/src/branch/master")
 			resp := MakeRequest(t, req, http.StatusSeeOther)
 			assert.Equal(t, "/user/login?redirect_to=%2Fuser2%2Frepo1%2Fsrc%2Fbranch%2Fmaster", resp.Header().Get("Location"))
+
+			req = NewRequest(t, "GET", "/user2/repo1/src/commit/65f1bf27bc3bf70f64657658635e66094edbcb4d/README.md")
+			resp = MakeRequest(t, req, http.StatusSeeOther)
+			assert.Equal(t, "/user/login?redirect_to=%2Fuser2%2Frepo1%2Fsrc%2Fcommit%2F65f1bf27bc3bf70f64657658635e66094edbcb4d%2FREADME.md", resp.Header().Get("Location"))
 		})
-		t.Run("AccessPublicRawWhenEnabled", func(t *testing.T) {
+		t.Run("AccessPublicRawAndCommitSourceWhenEnabled", func(t *testing.T) {
 			defer test.MockVariableValue(&setting.Service.AllowAnonymousPublicRaw, true)()
 			defer test.MockVariableValue(&testWebRoutes, routers.NormalRoutes())()
 
 			MakeRequest(t, NewRequest(t, "GET", "/user2/repo1/raw/branch/master/README.md"), http.StatusOK)
+			MakeRequest(t, NewRequest(t, "GET", "/user2/repo1/src/commit/65f1bf27bc3bf70f64657658635e66094edbcb4d/README.md"), http.StatusOK)
 			MakeRequest(t, NewRequest(t, "GET", "/user2/repo2/raw/branch/master/test.xml"), http.StatusNotFound)
+			MakeRequest(t, NewRequest(t, "GET", "/user2/repo2/src/commit/65f1bf27bc3bf70f64657658635e66094edbcb4d/test.xml"), http.StatusNotFound)
 		})
 		t.Run("UpdateTheme", func(t *testing.T) {
 			session := emptyTestSession(t)
