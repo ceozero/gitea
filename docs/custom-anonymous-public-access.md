@@ -41,6 +41,7 @@ rg -n "本实例扩展|ALLOW_ANONYMOUS_PUBLIC" modules routers services custom
 | `modules/setting/service_test.go` | 覆盖两个配置项的默认值与启用后的读取结果。 |
 | `tests/integration/signin_test.go` | 覆盖强制登录时公开仓库 raw 的匿名读取，以及私有仓库的拒绝访问。 |
 | `tests/integration/api_packages_container_test.go` | 覆盖公开镜像匿名拉取、私有镜像拒绝及目录/标签枚举拒绝。 |
+| `workflows/docker-ghcr.yml` 删掉了多余的workflows、只保留了docker-ghcr.yml。 |
 
 ## 升级合并检查清单
 
@@ -70,3 +71,53 @@ git diff --check
 - 未登录访问私有仓库 raw 文件失败。
 - 未登录可使用匿名容器 token 拉取公开镜像 manifest/blob。
 - 未登录无法拉取私有归属者镜像，无法写入镜像，也无法调用 `/_catalog` 或 `tags/list`。
+
+
+## 备份原nginx配置，不用管
+```
+location ~ ^/(api|zero|v1|git|v2|.*?/raw/.*)/ {
+    # 禁用 auth_basic
+    auth_basic off; 
+    # 同样代理到 Gitea 服务
+    proxy_pass http://127.0.0.1:3006; 
+    proxy_http_version 1.1;
+    proxy_set_header Connection $http_connection; 
+    proxy_set_header Upgrade $http_upgrade; 
+    proxy_set_header Host $host; 
+    proxy_set_header X-Real-IP $remote_addr; 
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; 
+    proxy_set_header X-Forwarded-Proto $scheme; 
+}
+location ~ ^/(favicon.ico|api|zero|v1|git|v2|.*?/raw/.*) {
+    # 禁用 auth_basic
+    auth_basic off; 
+    # 同样代理到 Gitea 服务
+    proxy_pass http://127.0.0.1:3006; 
+    proxy_http_version 1.1;
+    proxy_set_header Connection $http_connection; 
+    proxy_set_header Upgrade $http_upgrade; 
+    proxy_set_header Host $host; 
+    proxy_set_header X-Real-IP $remote_addr; 
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; 
+    proxy_set_header X-Forwarded-Proto $scheme; 
+}
+location / {
+    auth_basic "Restricted Access"; # 默认启用认证
+    auth_basic_user_file /www/sites/git.caiyx.com/auth_basic/auth.pass; 
+    client_max_body_size 512M;
+    proxy_pass http://127.0.0.1:3006; 
+    proxy_http_version 1.1;
+    proxy_set_header Connection $http_connection; 
+    proxy_set_header Upgrade $http_upgrade; 
+    proxy_set_header Host $host; 
+    proxy_set_header X-Real-IP $remote_addr; 
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; 
+    proxy_set_header X-Forwarded-Proto $scheme; 
+    add_header X-Robots-Tag "noindex, nofollow, nosnippet, noarchive, notranslate, noimageindex"; 
+    # 屏蔽爬虫
+    if ($http_user_agent ~* "qihoobot|Baiduspider|Googlebot|Googlebot-Mobile|Googlebot-Image|Mediapartners-Google|Adsbot-Google|Feedfetcher-Google|Yahoo! Slurp|Yahoo! Slurp China|YoudaoBot|Sosospider|Sogou spider|Sogou web spider|MSNBot|ia_archiver|Tomato Bot" ) {
+        return 403; 
+    }
+    add_header Strict-Transport-Security "max-age=31536000"; 
+}
+```
