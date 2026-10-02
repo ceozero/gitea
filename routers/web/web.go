@@ -1307,10 +1307,6 @@ func registerWebRoutes(m *web.Router, webAuth *AuthMiddleware) {
 		m.Get("/commit/*", context.RepoRefByType(git.RefTypeCommit), repo.SingleDownload)
 		m.Get("/*", context.RepoRefByType(""), repo.SingleDownload) // "/*" route is deprecated, and kept for backward compatibility
 	}, webAuth.AllowBasic, webAuth.AllowOAuth2, optSignInRaw, context.RepoAssignment, repo.MustBeNotEmpty, reqUnitCodeReader)
-	// 本实例扩展：固定提交的源码永久链接与 raw 下载共用匿名只读开关；分支、标签和其他仓库页面仍需登录。
-	m.Group("/{username}/{reponame}/src/commit", func() {
-		m.Get("/*", context.RepoRefByType(git.RefTypeCommit), repo.Home)
-	}, optSignInRaw, context.RepoAssignment, repo.MustBeNotEmpty, reqUnitCodeReader, repo.SetEditorconfigIfExists)
 
 	m.Group("/{username}/{reponame}", func() {
 		m.Group("/tree-list", func() {
@@ -1757,6 +1753,7 @@ func registerWebRoutes(m *web.Router, webAuth *AuthMiddleware) {
 			m.Get("", func(ctx *context.Context) { ctx.Redirect(ctx.Repo.RepoLink) }) // there is no "{owner}/{repo}/src" page, so redirect to "{owner}/{repo}" to avoid 404
 			m.Get("/branch/*", context.RepoRefByType(git.RefTypeBranch), repo.Home)
 			m.Get("/tag/*", context.RepoRefByType(git.RefTypeTag), repo.Home)
+			m.Get("/commit/*", context.RepoRefByType(git.RefTypeCommit), repo.Home)
 			m.Get("/*", context.RepoRefByType(""), repo.Home) // "/*" route is deprecated, and kept for backward compatibility
 		}, repo.SetEditorconfigIfExists)
 		m.Get("/tree/*", repo.RedirectRepoTreeToSrc)    // redirect "/owner/repo/tree/*" requests to "/owner/repo/src/*"
